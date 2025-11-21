@@ -5,13 +5,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const url = request.nextUrl; // 获取完整的URL对象
+  const { pathname } = url;
 
-  // 跳过不需要认证的路径
+  // ===========================================
+  // 🎯 【新增的域名自动跳转逻辑】
+  // ===========================================
+
+  // 1. 获取重定向目标域名和当前主机名
+  const REDIRECT_TARGET = process.env.REDIRECT_TARGET;
+  const currentHostname = url.hostname;
+
+  // 2. 检查是否需要重定向：
+  //    条件：当前主机名以 .pages.dev 结尾 (Cloudflare Pages 默认域名) 
+  //    且 REDIRECT_TARGET 环境变量已设置
+  if (currentHostname.endsWith('.pages.dev') && REDIRECT_TARGET) {
+    
+    // 3. 构建目标 URL（必须使用 https 协议）
+    //    保留完整的路径和查询参数 (url.pathname + url.search)
+    const targetUrl = `https://${REDIRECT_TARGET}${url.pathname}${url.search}`;
+    
+    // 4. 执行 301 永久重定向
+    //    这是最高优先级，确保 Pages.dev 域名直接跳转到自定义域名
+    return NextResponse.redirect(targetUrl, 301);
+  }
+
+  // ===========================================
+  // 原始认证逻辑 (域名跳转完成后才执行)
+  // ===========================================
+
+  // 跳过不需要认证的路径 (保留你的原有逻辑)
   if (shouldSkipAuth(pathname)) {
     return NextResponse.next();
   }
-
+  
+  // [ 后续的认证逻辑保持不变... ]
+  
   const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
 
   if (!process.env.PASSWORD) {
@@ -58,6 +87,8 @@ export async function middleware(request: NextRequest) {
   // 签名验证失败或不存在签名
   return handleAuthFailure(request, pathname);
 }
+
+// [其余的函数，如 verifySignature, handleAuthFailure, shouldSkipAuth, config 保持不变 ]
 
 // 验证签名
 async function verifySignature(
